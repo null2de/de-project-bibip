@@ -6,10 +6,10 @@ from pydantic import BaseModel
 
 
 class CarStatus(StrEnum):
-    available = "available"
-    reserve = "reserve"
-    sold = "sold"
-    delivery = "delivery"
+    available = 'available'
+    reserve = 'reserve'
+    sold = 'sold'
+    delivery = 'delivery'
 
 
 class Car(BaseModel):
@@ -24,7 +24,7 @@ class Car(BaseModel):
 
 
 class Model(BaseModel):
-    id: int
+    id: int  # noqa: VNE003
     name: str
     brand: str
 
