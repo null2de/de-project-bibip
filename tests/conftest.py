@@ -10,7 +10,7 @@ import pytest
 def tmp_dir_root() -> str:
     # Это путь к временной директории, в которой будут создаваться временные директории для тестов
     # Можно заменить на любой другой, который понравится.
-    path = "./temdir"
+    path = "./tempdir"
     if not os.path.exists(path):
         os.makedirs(path)
     return path
