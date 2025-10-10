@@ -1,3 +1,5 @@
+from typing import TextIO
+
 from models import Car, CarFullInfo, CarStatus, Model, ModelSaleStats, Sale
 
 
@@ -10,6 +12,12 @@ class CarService:
         self.cars_idx_file = root_directory_path + '/cars_index.txt'
         self.sales_file = root_directory_path + '/sales.txt'
         self.sales_idx_file = root_directory_path + '/sales_index.txt'
+
+    def _row_read(self, input_file: TextIO, row_number: int) -> list:
+        input_file.seek((row_number - 1) * 101)
+        values = input_file.read(100).split(';')
+        values[-1] = values[-1].rstrip()
+        return values
 
     def _get_row_number(self, idx_file_name: str, key: str) -> int:
         with open(idx_file_name, 'r', encoding='utf-8') as f:
@@ -27,7 +35,7 @@ class CarService:
                 left = mid + 1
             else:
                 right = mid - 1
-        raise Exception('Ошибка поиска записи в таблице cars')
+        raise Exception('Ошибка поиска записи в таблице индексов')
 
     def _fk_check(self, idx_file_name: str, f_key: str):
         try:
@@ -81,57 +89,67 @@ class CarService:
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
-        line: str = ';'.join([str(value) for value in model.model_dump().values()])
-
         self._add_idx(self.models_idx_file, model)
 
+        line: str = ';'.join([str(value) for value in model.model_dump().values()])
         with open(self.models_file, 'a', encoding='utf-8') as f:
             f.write(line.ljust(100) + '\n')
-
         return model
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_car(self, car: Car) -> Car:
-        line: str = ';'.join([str(value) for value in car.model_dump().values()])
-
         self._add_idx(self.cars_idx_file, car)
 
+        line: str = ';'.join([str(value) for value in car.model_dump().values()])
         with open(self.cars_file, 'a', encoding='utf-8') as f:
             f.write(line.ljust(100) + '\n')
-
         return car
 
     # Задание 2. Сохранение продаж.
     def sell_car(self, sale: Sale) -> Car:
-        line: str = ';'.join([str(value) for value in sale.model_dump().values()])
-
         self._add_idx(self.sales_idx_file, sale)
 
+        line: str = ';'.join([str(value) for value in sale.model_dump().values()])
         with open(self.sales_file, 'a', encoding='utf-8') as f:
             f.write(line.ljust(100) + '\n')
 
-        row_num = self._get_row_number(self.cars_idx_file, sale.car_vin)
+        row_number: int = self._get_row_number(self.cars_idx_file, sale.car_vin)
+        keys = list(Car.model_fields.keys())
 
-        with open(self.cars_file, '+r', encoding='utf-8') as f:
-            f.seek((row_num - 1) * 101)
-            keys = list(Car.model_fields.keys())
-            values = f.read(100).split(';')
-            values[-1] = values[-1].rstrip()
-            car = Car(**dict(zip(keys, values)))  # type: ignore
+        with open(self.cars_file, 'r+', encoding='utf-8') as f:
+            values = self._row_read(f, row_number)
+            car = Car(**dict(zip(keys, values)))
             car.status = CarStatus.sold
             line = ';'.join([str(value) for value in car.model_dump().values()])
-            f.seek((row_num - 1) * 101)
+            f.seek((row_number - 1) * 101)
             f.write(line.ljust(100) + '\n')
-
         return car
 
     # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
-        raise NotImplementedError
+        car_list = []
+        keys = list(Car.model_fields.keys())
+
+        with open(self.cars_file, 'a+', encoding='utf-8') as f:
+            rows_count = f.tell() // 101
+            f.seek(0)
+
+            for row_number in range(1, rows_count + 1):
+                values = self._row_read(f, row_number)
+                if values[-1] != 'available':
+                    continue
+                car_list.append(Car(**dict(zip(keys, values))))
+
+        # return sorted(car_list, key=lambda car: car.vin)
+        return car_list
 
     # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
-        raise NotImplementedError
+        row_number = self._get_row_number(self.cars_idx_file, vin)
+        with open(self.cars_file, 'r', encoding='utf-8') as f:
+            values = self._row_read(f, row_number)
+            print(values)
+        return None
 
     # Задание 5. Обновление ключевого поля
     def update_vin(self, vin: str, new_vin: str) -> Car:

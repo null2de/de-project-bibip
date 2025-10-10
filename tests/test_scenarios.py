@@ -140,6 +140,8 @@ class TestCarServiceScenarios:
 
         available_cars = [car for car in car_data if car.status == CarStatus.available]
 
+        # available_cars.sort(key=lambda car: car.vin)
+
         assert service.get_cars(CarStatus.available) == available_cars
 
     def test_list_full_info_by_vin(self, tmpdir: str, car_data: list[Car], model_data: list[Model]):
