@@ -4,44 +4,126 @@ from models import Car, CarFullInfo, CarStatus, Model, ModelSaleStats, Sale
 class CarService:
     def __init__(self, root_directory_path: str) -> None:
         self.root_directory_path = root_directory_path
+        self.models_file = root_directory_path + '/models.txt'
+        self.models_idx_file = root_directory_path + '/models_index.txt'
+        self.cars_file = root_directory_path + '/cars.txt'
+        self.cars_idx_file = root_directory_path + '/cars_index.txt'
+        self.sales_file = root_directory_path + '/sales.txt'
+        self.sales_idx_file = root_directory_path + '/sales_index.txt'
+
+    def _get_row_number(self, idx_file_name: str, key: str) -> int:
+        with open(idx_file_name, 'r', encoding='utf-8') as f:
+            idx_list = [
+                (line.split(';')[0], line.split(';')[1].rstrip())
+                for line in f.readlines()
+            ]
+        left = 0
+        right = len(idx_list) - 1
+        while left <= right:
+            mid = (left + right) // 2
+            if idx_list[mid][0] == key:
+                return int(idx_list[mid][1])
+            if idx_list[mid][0] < key:
+                left = mid + 1
+            else:
+                right = mid - 1
+        raise Exception('Ошибка поиска записи в таблице cars')
+
+    def _fk_check(self, idx_file_name: str, f_key: str):
+        try:
+            with open(idx_file_name, 'r', encoding='utf-8') as mf:
+                idx_list = [
+                    (line.split(';')[0], line.split(';')[1].rstrip())
+                    for line in mf.readlines()
+                ]
+                if f_key not in (key for key, _ in idx_list):
+                    raise Exception('Ошибка FKEY: Нет записи в родительской таблице')
+        except FileNotFoundError:
+            raise Exception('Ошибка FKEY: Родительская таблица не существует')
+
+    def _add_idx(self, idx_file_name: str, item: Model | Car | Sale) -> None:
+        pr_key: str | int = item.index()
+
+        with open(idx_file_name, 'a+', encoding='utf-8') as f:
+            if not f.tell():
+                f.write(str(pr_key) + ';' + '1' + '\n')
+                return
+
+            f.seek(0)
+            idx_list: list[tuple[int | str, str]] = [
+                (line.split(';')[0], line.split(';')[1].rstrip())
+                for line in f.readlines()
+            ]
+
+            if pr_key in (key for key, _ in idx_list):
+                raise Exception('Ошибка PKEY: Такой первичный ключ уже есть в таблице')
+
+            if isinstance(item, Car):
+                self._fk_check(self.models_idx_file, str(item.model))
+
+            if isinstance(item, Sale):
+                self._fk_check(self.cars_idx_file, item.car_vin)
+
+            if isinstance(item, Model):
+                idx_list = [(int(key), idx) for key, idx in idx_list]
+                pr_key = int(pr_key)
+
+            if pr_key > idx_list[-1][0]:  # type: ignore
+                line: str = str(pr_key) + ';' + str(len(idx_list) + 1) + '\n'
+                f.write(line)
+
+        with open(idx_file_name, 'w', encoding='utf-8') as f:
+            idx_list.append((pr_key, str(len(idx_list) + 1)))
+            idx_list.sort()
+
+            output_list = [str(key) + ';' + idx + '\n' for key, idx in idx_list]
+            f.writelines(output_list)
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_model(self, model: Model) -> Model:
-
-        path: str = self.root_directory_path
         line: str = ';'.join([str(value) for value in model.model_dump().values()])
 
-        with open(path + '/models.txt', 'a', encoding='utf-8') as f:
-            f.write(line.ljust(99) + '\n')
+        self._add_idx(self.models_idx_file, model)
 
-        with open(path + '/models_index.txt', 'a+', encoding='utf-8') as f:
-            if not f.tell():
-                f.write(str(model.id) + ';' + '1' + '\n')
-                return model
-            f.seek(0)
-            raw_lines = map(lambda s: s.split(';'), f.readlines())
-            idx_lst = [(int(key), int(idx)) for key, idx in raw_lines]
-            if model.id >= idx_lst[-1][0]:
-                f.write(str(model.id) + ';' + str(len(idx_lst) + 1) + '\n')
-                return model
+        with open(self.models_file, 'a', encoding='utf-8') as f:
+            f.write(line.ljust(100) + '\n')
 
-        with open(path + '/models_index.txt', 'w', encoding='utf-8') as f:
-            idx_lst.append((model.id, len(idx_lst) + 1))
-            idx_lst.sort()
-            to_write = map(lambda tup: str(tup[0]) + ';' + str(tup[1]) + '\n', idx_lst)
-            f.writelines(to_write)
         return model
 
     # Задание 1. Сохранение автомобилей и моделей
     def add_car(self, car: Car) -> Car:
         line: str = ';'.join([str(value) for value in car.model_dump().values()])
-        with open(self.root_directory_path + '/cars.txt', 'a', encoding='utf-8') as f:
-            f.write(line.ljust(99) + '\n')
+
+        self._add_idx(self.cars_idx_file, car)
+
+        with open(self.cars_file, 'a', encoding='utf-8') as f:
+            f.write(line.ljust(100) + '\n')
+
         return car
 
     # Задание 2. Сохранение продаж.
     def sell_car(self, sale: Sale) -> Car:
-        raise NotImplementedError
+        line: str = ';'.join([str(value) for value in sale.model_dump().values()])
+
+        self._add_idx(self.sales_idx_file, sale)
+
+        with open(self.sales_file, 'a', encoding='utf-8') as f:
+            f.write(line.ljust(100) + '\n')
+
+        row_num = self._get_row_number(self.cars_idx_file, sale.car_vin)
+
+        with open(self.cars_file, '+r', encoding='utf-8') as f:
+            f.seek((row_num - 1) * 101)
+            keys = list(Car.model_fields.keys())
+            values = f.read(100).split(';')
+            values[-1] = values[-1].rstrip()
+            car = Car(**dict(zip(keys, values)))  # type: ignore
+            car.status = CarStatus.sold
+            line = ';'.join([str(value) for value in car.model_dump().values()])
+            f.seek((row_num - 1) * 101)
+            f.write(line.ljust(100) + '\n')
+
+        return car
 
     # Задание 3. Доступные к продаже
     def get_cars(self, status: CarStatus) -> list[Car]:
