@@ -130,7 +130,8 @@ class CarService:
         car_list = []
         keys = list(Car.model_fields.keys())
 
-        with open(self.cars_file, 'a+', encoding='utf-8') as f:
+        with open(self.cars_file, 'r', encoding='utf-8') as f:
+            f.seek(0, 2)
             rows_count = f.tell() // 101
             f.seek(0)
 
@@ -146,9 +147,48 @@ class CarService:
     # Задание 4. Детальная информация
     def get_car_info(self, vin: str) -> CarFullInfo | None:
         row_number = self._get_row_number(self.cars_idx_file, vin)
+
         with open(self.cars_file, 'r', encoding='utf-8') as f:
             values = self._row_read(f, row_number)
-            print(values)
+
+        keys = list(Car.model_fields.keys())
+        car = Car(**dict(zip(keys, values)))
+
+        row_number = self._get_row_number(self.models_idx_file, str(car.model))
+
+        with open(self.models_file, 'r', encoding='utf-8') as f:
+            values = self._row_read(f, row_number)
+
+        keys = list(Model.model_fields.keys())
+        model = Model(**dict(zip(keys, values)))
+
+        result = CarFullInfo(
+            vin=car.vin,
+            car_model_name=model.name,
+            car_model_brand=model.brand,
+            price=car.price,
+            date_start=car.date_start,
+            status=car.status,
+            sales_date=None,
+            sales_cost=None)
+
+        if car.status != CarStatus.sold:
+            return result
+
+        with open(self.sales_file, 'r', encoding='utf-8') as f:
+            f.seek(0, 2)
+            rows_count = f.tell() // 101
+            f.seek(0)
+
+            for row_number in range(1, rows_count + 1):
+                values = self._row_read(f, row_number)
+                if values[1] == car.vin:
+                    keys = list(Sale.model_fields.keys())
+                    sale = Sale(**dict(zip(keys, values)))
+                    result.sales_date = sale.sales_date
+                    result.sales_cost = sale.cost
+                    return result
+
         return None
 
     # Задание 5. Обновление ключевого поля
