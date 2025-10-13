@@ -1,5 +1,2 @@
-.env
-venv/
 __pycache__
 tempdir/
-.DS_Store
